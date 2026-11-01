@@ -1,0 +1,16 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rider tracker</title>
+<style>body{font:16px system-ui;background:#111;color:#eee;padding:16px}input,button{font:inherit;padding:10px;margin:6px 0;width:100%;border-radius:6px;border:1px solid #444;background:#222;color:#eee}button{background:#27c}#o{white-space:pre;font:13px monospace;color:#9e9}</style></head>
+<body><h2>Rider tracker</h2>
+<input id="id" value="phone1" placeholder="rider id">
+<button onclick="go()">Start sending GPS</button><button onclick="stop()" style="background:#555">Stop</button>
+<div id="o">idle</div>
+<script>
+let w=null,last=0;
+function go(){stop();if(!navigator.geolocation){o.textContent='No geolocation (needs HTTPS)';return}
+w=navigator.geolocation.watchPosition(p=>{const n=Date.now();if(n-last<2000)return;last=n;
+fetch(`/riders/${encodeURIComponent(id.value)}/ping`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.coords.latitude,lng:p.coords.longitude})})
+.then(r=>r.json()).then(j=>o.textContent=`sent ${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}\nhex ${j.h3}\n±${p.coords.accuracy.toFixed(0)} m`).catch(e=>o.textContent='error '+e)},
+e=>o.textContent='GPS error: '+e.message,{enableHighAccuracy:true,maximumAge:1000})}
+function stop(){if(w!=null)navigator.geolocation.clearWatch(w);w=null}
+</script></body></html>

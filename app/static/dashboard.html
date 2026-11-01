@@ -1,0 +1,40 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dispatch dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>*{box-sizing:border-box}body{margin:0;display:flex;height:100vh;font:13px system-ui;background:#111;color:#ddd}
+#s{width:340px;overflow:auto;padding:10px;background:#1b1b1b}#map{flex:1}button{background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:4px;padding:5px 8px;margin:2px;cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-bottom:8px}td,th{padding:2px 4px;border-bottom:1px solid #2a2a2a;text-align:right}h4{margin:10px 0 4px;color:#8cf}label{display:flex;justify-content:space-between}input[type=range]{width:150px}</style></head>
+<body><div id="s">
+<button onclick="post('/demo/virtual-riders?n=8')">+8 bot riders</button><button onclick="post('/demo/orders?n=5')">+5 orders</button>
+<button onclick="post('/dispatch/run')">Dispatch now</button><button onclick="hot()">Hotspots</button>
+<h4>Weights</h4>
+<label>α time<input id="wt" type="range" min="0" max="3" step=".1" value="1"></label>
+<label>β pay<input id="wp" type="range" min="0" max="3" step=".1" value=".5"></label>
+<label>δ fairness<input id="wf" type="range" min="0" max="3" step=".1" value="1"></label>
+<button onclick="setW()">Apply</button>
+<h4>Metrics</h4><div id="m"></div>
+<h4>Riders</h4><table id="rt"></table>
+<h4>Recent orders</h4><table id="ot"></table></div><div id="map"></div>
+<script src="https://cdn.jsdelivr.net/npm/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<script>
+const map=L.map('map').setView([12.97,77.59],13),hx=L.layerGroup().addTo(map),rd=L.layerGroup().addTo(map),hs=L.layerGroup().addTo(map);let fit=0;
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(map);
+const j=async(u,o)=>(await fetch(u,o)).json();
+const post=async u=>{await j(u,{method:'POST'});load()};
+async function setW(){await j('/config/weights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({time:+wt.value,pay:+wp.value,fair:+wf.value})});load()}
+async function done(id){await j('/orders/'+id+'/complete',{method:'POST'});load()}
+async function hot(){hs.clearLayers();(await j('/hotspots')).forEach(h=>L.polygon(h.boundary,{color:'#fa0',weight:1,fillOpacity:.25}).bindTooltip('forecast '+h.expected_orders.toFixed(1)).addTo(hs))}
+async function load(){
+ const [R,O,H,M]=await Promise.all([j('/riders'),j('/orders'),j('/hexes'),j('/metrics')]);
+ hx.clearLayers();rd.clearLayers();
+ H.forEach(h=>L.polygon(h.boundary,{color:'#27c',weight:1,fillColor:h.pending?'#f80':'#27c',fillOpacity:.15+Math.min(.6,.15*(h.pending+h.riders))}).bindTooltip(`${h.h3}\nriders ${h.riders} · pending ${h.pending}`).addTo(hx));
+ R.forEach(r=>L.circleMarker([r.lat,r.lng],{radius:r.virtual?5:8,color:'#fff',weight:1,fillColor:r.status=='busy'?'#f33':r.virtual?'#0c8':'#3af',fillOpacity:1}).bindTooltip(r.id).addTo(rd));
+ O.filter(o=>o.status=='pending').forEach(o=>L.circleMarker([o.rlat,o.rlng],{radius:4,color:'#fa0',fillOpacity:1}).addTo(rd));
+ if(!fit&&R.length){map.setView([R[0].lat,R[0].lng],14);fit=1}
+ m.textContent=`riders ${M.riders} · delivered ${M.delivered} · avg payout ₹${M.avg_payout.toFixed(1)} · gini ${M.gini.toFixed(3)}`;
+ rt.innerHTML='<tr><th>id</th><th>status</th><th>orders</th><th>₹</th></tr>'+R.map(r=>`<tr><td>${r.id}</td><td>${r.status}</td><td>${r.n_orders}</td><td>${r.earnings}</td></tr>`).join('');
+ ot.innerHTML='<tr><th>#</th><th>status</th><th>rider</th><th>km</th><th>₹</th><th></th></tr>'+O.slice(0,15).map(o=>`<tr><td>${o.id}</td><td>${o.status}</td><td>${o.rider_id||''}</td><td>${o.km}</td><td>${o.payout}</td><td>${o.status=='assigned'?`<button onclick="done(${o.id})">done</button>`:''}</td></tr>`).join('');
+}
+load();setInterval(load,3000);
+try{const w=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host+'/ws');w.onmessage=load}catch(e){}
+</script></body></html>

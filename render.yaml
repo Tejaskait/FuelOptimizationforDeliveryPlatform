@@ -1,0 +1,9 @@
+# Free deploy: render.com (web service) + Neon/Supabase free Postgres
+services:
+  - type: web
+    name: delivery-platform
+    runtime: docker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
